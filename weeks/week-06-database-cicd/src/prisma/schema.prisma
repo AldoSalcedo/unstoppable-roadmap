@@ -1,0 +1,398 @@
+// schema.prisma — Healthcare Clinical Database
+// DÍA 1: Prisma Schema Design — Modeling for Auditing & HIPAA Compliance
+//
+// This schema demonstrates professional healthcare data modeling with:
+// - HIPAA audit trails (createdBy, updatedAt on every table)
+// - UUID identifiers (security + distributed systems)
+// - Compound indexes (query optimization)
+// - Healthcare-specific enums (TestType, TestStatus, Role)
+//
+// Your auditing background: Every table tracks WHO created/modified data.
+// This is not just "nice to have"—it's a legal requirement (HIPAA penalties: $100–$50k per violation).
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================================
+// PATIENT: The central entity in healthcare
+// ============================================================================
+//
+// El problema (en PostgreSQL):
+// How do you store patient demographics while ensuring:
+// 1. Every access is auditable (HIPAA requirement)
+// 2. Lookups are fast (MRN search should be <100ms)
+// 3. Patient data is never permanently deleted (audit trail persists)
+//
+// Con Prisma:
+// - @id @default(cuid()) generates UUID automatically
+// - @unique on MRN ensures no duplicate medical record numbers
+// - @@index on frequently searched columns
+// - Relation fields (labTests, auditLogs) for type safety
+//
+// Ventajas:
+// - Relational integrity: foreign keys prevent orphaned records
+// - Type generation: TypeScript types auto-generated from schema
+// - Audit trail: createdBy + updatedAt on every mutation
+//
+// Aplicación Healthcare:
+// Patient records are the foundation of clinical software. Every clinician
+// needs to find a patient by MRN instantly. Every access is logged to AuditLog.
+
+model Patient {
+  // Unique identifier using CUID (collision-resistant UUID)
+  // Why not auto-increment? Security: IDs are not sequential (can't enumerate all patients)
+  // Distribution: UUIDs work across multiple databases
+  id String @id @default(cuid())
+
+  // Medical Record Number: the unique identifier in healthcare systems
+  // Why @unique? Prevents duplicate MRNs (business rule)
+  // Why @db.VarChar(20)? MRNs vary by hospital (10-50 chars), so we limit to 20
+  mrn String @unique @db.VarChar(20)
+
+  // Patient identification
+  firstName String
+  lastName String
+  dateOfBirth DateTime
+
+  // HIPAA Audit Fields (mandatory on every table)
+  // createdAt: When was this patient created?
+  // updatedAt: When was this record last modified?
+  // createdBy: Who created this patient? (FK to User.id)
+  // This triple allows you to answer: "Who changed what, when?"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+
+  // Relations: Type-safe access to related data
+  // One patient → many lab tests
+  labTests LabTest[]
+
+  // One patient → many audit log entries
+  // When someone views/modifies this patient, an AuditLog is created
+  auditLogs AuditLog[] @relation("PatientAudit")
+
+  // Indexes: Optimize queries
+  // @@index([mrn]): Speed up "find patient by MRN" (O(log n) instead of O(n))
+  // @@index([createdAt]): Speed up "find patients created in date range" (for audits)
+  @@index([mrn])
+  @@index([createdAt])
+
+  // @@map: Database table name (instead of "Patient")
+  @@map("patients")
+}
+
+// ============================================================================
+// LABTEST: Clinical test results attached to patients
+// ============================================================================
+//
+// El problema (en PostgreSQL):
+// How do you store lab results (blood tests, imaging, etc.) such that:
+// 1. Queries are fast (find all pending tests for a patient in <100ms)
+// 2. Results are flexible (different test types have different fields)
+// 3. Everything is auditable (who reviewed this test? when? what changed?)
+//
+// Con Prisma:
+// - Enum for TestType (BLOOD, IMAGING, PATHOLOGY)
+// - JSON field for flexible results structure
+// - Compound index on (patientId, status) for filtering
+// - Optional fields (reviewedBy is null until test is reviewed)
+//
+// Ventajas:
+// - JSON results: different test types can have different fields
+// - Status workflow: PENDING → COMPLETED → REVIEWED (audit trail at each step)
+// - Relationship: Every test is linked to a patient (foreign key)
+//
+// Aplicación Healthcare:
+// Lab tests drive clinical decisions. A clinician needs to find
+// "all pending blood tests for my patients" instantly. A lab tech
+// needs to mark tests as COMPLETED. A clinician needs to REVIEW.
+// Every transition is logged to AuditLog.
+
+model LabTest {
+  // Unique identifier
+  id String @id @default(cuid())
+
+  // Patient relationship: Which patient is this test for?
+  // @relation with onDelete: Cascade means: if patient is deleted, delete their tests too
+  // (In healthcare, tests should probably be soft-deleted via deletedAt field instead)
+  patientId String
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Test classification: Blood work, imaging, pathology report, etc.
+  // Enum prevents invalid test types (database-level constraint)
+  testType TestType
+
+  // Clinical results: Flexible JSON for different test types
+  // Example BLOOD: { "glucose": 105, "hemoglobin": 14.5, "unit": "mg/dL" }
+  // Example IMAGING: { "imaging_type": "X-RAY", "location": "chest", "findings": "..." }
+  // Why JSON? Different test types have completely different fields
+  // Why nullable? Tests start empty, results added when lab completes test
+  results Json?
+
+  // Workflow status: Track the lifecycle of this test
+  // PENDING: Lab hasn't run it yet
+  // COMPLETED: Lab ran it, results entered
+  // REVIEWED: Clinician reviewed it, diagnosis made
+  // Enum prevents status typos (TEST_PENDING vs PENDING vs Pending)
+  status TestStatus
+
+  // When was the test performed? (not same as createdAt; test might be recorded later)
+  performedAt DateTime
+
+  // Who reviewed this test? (nullable: test might be pending review)
+  reviewedBy String?
+
+  // HIPAA Audit Fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+
+  // Relations: Audit trail for this specific test
+  auditLogs AuditLog[] @relation("LabTestAudit")
+
+  // Indexes: Query optimization
+  // @@index([patientId, status]): Find all PENDING tests for patient → O(log n)
+  // Compound index is faster than two separate indexes
+  // @@index([performedAt]): Find recent tests (last 30 days, etc.)
+  @@index([patientId, status])
+  @@index([performedAt])
+
+  @@map("lab_tests")
+}
+
+// ============================================================================
+// USER: Clinicians, lab techs, admins
+// ============================================================================
+//
+// El problema (en PostgreSQL):
+// How do you represent different types of healthcare workers such that:
+// 1. Access control works (clinician ≠ lab tech ≠ admin permissions)
+// 2. Auditing tracks who did what
+// 3. Sessions are secure
+//
+// Con Prisma:
+// - Enum for Role (ADMIN, CLINICIAN, LAB_TECH)
+// - Relations to audit logs (who made changes)
+// - Email is unique (no duplicate accounts)
+//
+// Ventajas:
+// - RBAC: Role-Based Access Control (week 07)
+// - Audit trail: Every user's actions are logged
+// - Relationships: Find all tests reviewed by a clinician
+//
+// Aplicación Healthcare:
+// Different roles have different permissions. A lab tech can create tests.
+// A clinician can review tests. An admin can manage users.
+// Audit logs answer: "Who reviewed this patient's test at 3:42pm?"
+
+model User {
+  // Unique identifier
+  id String @id @default(cuid())
+
+  // Email: Unique identifier for login (week 07: Auth.js)
+  email String @unique
+
+  // Role: Determines what this user can do
+  // ADMIN: Create users, manage system
+  // CLINICIAN: Create patients, review tests
+  // LAB_TECH: Create lab tests, mark as completed
+  role Role
+
+  // HIPAA Audit Fields
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations: Find all changes made by this user
+  auditLogs AuditLog[] @relation("UserAudit")
+
+  @@map("users")
+}
+
+// ============================================================================
+// AUDITLOG: The audit trail itself (mandatory for HIPAA)
+// ============================================================================
+//
+// El problema (en PostgreSQL):
+// How do you create an immutable audit trail such that:
+// 1. Every data change is recorded (who, what, when, before, after)
+// 2. Compliance officers can query "what happened to patient 123?"
+// 3. Regulatory audits can verify all access
+//
+// Con Prisma:
+// - Separate model (AuditLog) for audit events
+// - JSON fields for oldValues/newValues (track changes)
+// - Indexes on userId + timestamp (find all actions by user)
+// - Indexes on entityType + entityId (find all changes to specific record)
+//
+// Ventajas:
+// - Immutability: Audit logs should never be modified (delete is expensive)
+// - Compliance: HIPAA requires audit trails (this satisfies it)
+// - Debugging: Trace exactly what happened and when
+//
+// Aplicación Healthcare:
+// "A patient's lab results were changed from Normal to Abnormal.
+// Who did it? When? Should we notify the clinician?"
+// Answer: Query AuditLog where entityId = patient.id, action = UPDATE
+//
+// Your auditing background: This table IS your audit trail.
+// Every field has a compliance purpose.
+
+model AuditLog {
+  // Unique identifier
+  id String @id @default(cuid())
+
+  // What entity changed?
+  // entityType: "PATIENT" | "LABTEST" | "USER"
+  // entityId: The ID of the patient/test/user that changed
+  // Together: (PATIENT, 123) means "patient with ID 123 changed"
+  entityType String
+  entityId String
+
+  // What happened to it?
+  // CREATE: New patient/test/user created
+  // UPDATE: Existing record modified
+  // DELETE: Marked as deleted
+  // READ: Data accessed (expensive to log, but HIPAA requires it for sensitive data)
+  action Action
+
+  // Who did it?
+  userId String
+  user User @relation("UserAudit", fields: [userId], references: [id])
+
+  // When did it happen?
+  // Timestamp is immutable: once created, never changes
+  timestamp DateTime @default(now())
+
+  // What changed?
+  // oldValues: The state BEFORE the change (JSON)
+  // newValues: The state AFTER the change (JSON)
+  // Example: {
+  //   "oldValues": { "status": "PENDING" },
+  //   "newValues": { "status": "COMPLETED" }
+  // }
+  // This allows compliance: "What did the clinician change?"
+  oldValues Json?
+  newValues Json?
+
+  // Optional: Direct relationships to entities
+  // Allows eager loading: auditLog.patient.firstName (instead of looking up separately)
+  patient Patient? @relation("PatientAudit", fields: [entityId], references: [id], onDelete: SetNull)
+  labTest LabTest? @relation("LabTestAudit", fields: [entityId], references: [id], onDelete: SetNull)
+
+  // Indexes: Query optimization
+  // @@index([userId, timestamp]): Find all actions by user in time range
+  // Example: "Show me everything User 456 did between 2024-01-01 and 2024-01-31"
+  // @@index([entityType, entityId]): Find all changes to specific entity
+  // Example: "Show me the complete audit trail of patient 123"
+  @@index([userId, timestamp])
+  @@index([entityType, entityId])
+
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ENUMS: Type-safe constraints
+// ============================================================================
+
+// TestType: Different categories of clinical tests
+enum TestType {
+  BLOOD // Blood work (glucose, hemoglobin, etc.)
+  IMAGING // X-ray, MRI, CT, ultrasound
+  PATHOLOGY // Tissue analysis, biopsy
+}
+
+// TestStatus: Workflow state of a lab test
+// PENDING → COMPLETED → REVIEWED (linear progression)
+enum TestStatus {
+  PENDING // Lab hasn't run it yet
+  COMPLETED // Lab ran it, results entered
+  REVIEWED // Clinician reviewed and made clinical decision
+}
+
+// Role: User permission level
+enum Role {
+  ADMIN // Can create users, manage system
+  CLINICIAN // Can create patients, review tests
+  LAB_TECH // Can create tests, mark as completed
+}
+
+// Action: Type of audit event
+enum Action {
+  CREATE // New record created
+  UPDATE // Existing record modified
+  DELETE // Record marked as deleted
+  READ // Data accessed (sensitive data only)
+}
+
+// ============================================================================
+// NOTAS DE APRENDIZAJE
+// ============================================================================
+//
+// 1. AUDIT FIELDS ARE MANDATORY
+//    Every table should have createdAt, updatedAt, createdBy.
+//    This is not optional in healthcare; it's a legal requirement.
+//
+// 2. INDEXES ARE FOR QUERIES
+//    @@index([mrn]) makes "find patient by MRN" fast.
+//    Without indexes, Prisma scans all rows (O(n) = slow).
+//    With indexes, Prisma uses B-tree (O(log n) = fast).
+//
+// 3. ENUMS ARE FOR CONSISTENCY
+//    TestStatus: enum prevents typos (PENDING, pending, test_pending all invalid).
+//    Database enforces the constraint: invalid values rejected at DB level.
+//
+// 4. JSON FIELDS ARE FLEXIBLE BUT RISKY
+//    results: Json? allows different test types to have different structures.
+//    Risk: No type safety at database level (TypeScript helps at runtime).
+//    Solution: Validate JSON in application code before saving.
+//
+// 5. COMPOUND INDEXES > SINGLE INDEXES
+//    @@index([patientId, status]) is faster than separate indexes.
+//    Covers common query: "find PENDING tests for patient X"
+//
+// 6. FOREIGN KEYS PREVENT ORPHANS
+//    labTests Patient @relation(..., onDelete: Cascade)
+//    Means: if patient is deleted, all their tests are deleted too.
+//    (In healthcare, consider soft-delete: add deletedAt field instead)
+//
+// 7. AUDIT LOGS ARE IMMUTABLE
+//    AuditLog records are created once, never modified.
+//    This ensures compliance: audit trail can't be tampered with.
+//
+// 8. PERMISSIONS LIVE IN CODE (Week 07)
+//    This schema has Role enum, but permissions logic lives in middleware.
+//    Example: if role == CLINICIAN, allow reading patient data.
+//    Database doesn't enforce permissions; application code does.
+//    This is intentional: flexibility > rigidity.
+
+// ============================================================================
+// CONEXIÓN CON TU BACKGROUND
+// ============================================================================
+//
+// AUDITORÍA:
+// This entire schema is an audit trail waiting to be queried.
+// Your background means you understand:
+// - Who? (createdBy, userId)
+// - What? (newValues, oldValues)
+// - When? (createdAt, updatedAt, timestamp)
+// - Why? (entity context in audit log)
+// This makes you uniquely qualified to build defensible systems.
+//
+// BIOLOGÍA (QBP):
+// Lab results have domain-specific meaning:
+// - BLOOD tests: glucose, hemoglobin, WBC, etc. (different units, reference ranges)
+// - IMAGING: location matters (chest X-ray vs pelvis)
+// - PATHOLOGY: specimen type matters (serum vs plasma)
+// Your QBP knowledge means you understand why JSON results must be flexible.
+// Another engineer might use rigid fields; you know that's wrong.
+//
+// SALES/UX:
+// Performance = Revenue. A 10-second patient search → clinicians abandon your app.
+// Your indexes ensure searches are <100ms. That's the difference between product-market fit and failure.
+// This week you're ensuring your product is fast enough to use in a busy hospital.

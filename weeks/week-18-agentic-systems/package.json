@@ -1,0 +1,31 @@
+{
+  "name": "week-18-agentic-systems",
+  "version": "1.0.0",
+  "description": "Agentic Systems — Diseño de sistemas multi-agente con Anthropic SDK",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "capstone": "tsx src/dia7-capstone/clinical-research-assistant.ts"
+  },
+  "keywords": ["ai", "agents", "rag", "anthropic", "multi-agent", "tool-use"],
+  "author": "Aldo",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "zod": "^3.23.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "eslint": "^8.54.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0"
+  }
+}

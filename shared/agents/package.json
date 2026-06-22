@@ -1,0 +1,19 @@
+{
+  "name": "@unstoppable/agents",
+  "version": "1.0.0",
+  "description": "AI-powered reviewer agents for each week of the Unstoppable Roadmap",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "review": "tsx src/reviewer.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.94"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.3.0"
+  }
+}

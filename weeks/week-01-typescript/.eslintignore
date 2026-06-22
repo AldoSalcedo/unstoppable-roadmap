@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Config files
+.eslintrc.js
+*.config.js
+*.config.ts
+
+# Tests
+coverage/
+
+# Logs
+*.log

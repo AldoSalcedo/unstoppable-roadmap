@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# Turbo cache
+.turbo/
+
+# Lighthouse CI reports (local only)
+.lighthouseci/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment variables (never commit secrets)
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.vscode/settings.json
+.idea/
+
+# Claude Code personal data (memory, sessions)
+.claude/
+
+# Vercel
+.vercel

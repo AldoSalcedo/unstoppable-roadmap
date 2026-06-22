@@ -1,0 +1,48 @@
+{
+  "name": "unstoppable-roadmap",
+  "version": "1.0.0",
+  "private": true,
+  "description": "12-Week Intensive Program: From Senior Developer to Unstoppable Engineer",
+  "author": "Aldo Salcedo",
+  "license": "MIT",
+  "workspaces": [
+    "weeks/week-*",
+    "shared/*"
+  ],
+  "scripts": {
+    "install:all": "pnpm install",
+    "dev:all": "turbo run dev",
+    "build:all": "turbo run build",
+    "test:all": "turbo run test",
+    "lint:all": "turbo run lint",
+    "format:all": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "setup:week": "./scripts/setup-week.sh",
+    "check:progress": "./scripts/check-progress.sh",
+    "generate:report": "./scripts/generate-report.sh",
+    "review": "pnpm --filter @unstoppable/agents review",
+    "review:week-01": "pnpm --filter @unstoppable/agents review week-01-typescript",
+    "review:week-02": "pnpm --filter @unstoppable/agents review week-02-testing",
+    "review:week-03": "pnpm --filter @unstoppable/agents review week-03-clean-architecture",
+    "review:week-04": "pnpm --filter @unstoppable/agents review week-04-performance",
+    "review:week-05": "pnpm --filter @unstoppable/agents review week-05-nextjs",
+    "review:week-06": "pnpm --filter @unstoppable/agents review week-06-database-cicd",
+    "review:week-07": "pnpm --filter @unstoppable/agents review week-07-auth-payments",
+    "review:week-08": "pnpm --filter @unstoppable/agents review week-08-react-native-ai",
+    "review:week-09": "pnpm --filter @unstoppable/agents review week-09-mobile-advanced",
+    "review:week-10": "pnpm --filter @unstoppable/agents review week-10-mobile-production",
+    "review:week-11": "pnpm --filter @unstoppable/agents review week-11-system-design",
+    "review:week-12": "pnpm --filter @unstoppable/agents review week-12-portfolio"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "prettier": "^3.1.0",
+    "turbo": "^1.11.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.12.0"
+}

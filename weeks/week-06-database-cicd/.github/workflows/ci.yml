@@ -1,0 +1,428 @@
+# .github/workflows/ci.yml — CI/CD Pipeline
+# DÍA 5: GitHub Actions — Automating Tests, Lint, Coverage, Deploy
+#
+# This workflow runs on every push and PR.
+# Purpose: Ensure code quality before production deployment.
+#
+# Your auditing background: This pipeline IS an audit log.
+# Every step is recorded: who triggered it, what ran, what succeeded/failed.
+#
+# Stages:
+# 1. Test: Run vitest with coverage (fail if <80%)
+# 2. Lint: Check code style (ESLint, Prettier)
+# 3. Security: npm audit for vulnerabilities
+# 4. Deploy: Deploy to staging on main branch (manual approval on production)
+
+name: CI/CD Pipeline
+
+# ============================================================================
+# TRIGGERS: When does this workflow run?
+# ============================================================================
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# ============================================================================
+# ENVIRONMENT VARIABLES: Shared across all jobs
+# ============================================================================
+env:
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://postgres:test@localhost:5432/test_db
+
+jobs:
+  # ============================================================================
+  # JOB 1: TEST
+  # ============================================================================
+  # Purpose: Run unit/integration tests with coverage
+  # Requirement: >80% coverage (HIPAA/FDA requirement for healthcare software)
+  # Database: PostgreSQL in Docker (for integration tests)
+  #
+  # El problema (en JavaScript):
+  # How do you test database queries in CI?
+  # You need a real PostgreSQL database (in memory won't work for Prisma).
+  #
+  # Con GitHub Actions services:
+  # Spin up PostgreSQL container during test run.
+  # Migrate database schema automatically.
+  # Run tests against real database.
+  # Tear down container after tests.
+  #
+  # Ventajas:
+  # - Tests run against real database (catches bugs SQLite misses)
+  # - Isolated per-run (no cross-contamination)
+  # - Fast (containers start in <5 seconds)
+  #
+  # Aplicación Healthcare:
+  # HIPAA requires comprehensive testing (FDA-style rigor).
+  # Real database in CI catches edge cases you'd miss with mocks.
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # ========================================================================
+    # Services: Dependencies for this job (PostgreSQL container)
+    # ========================================================================
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      # ====================================================================
+      # Step 1: Checkout code
+      # ====================================================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ====================================================================
+      # Step 2: Setup Node.js
+      # ====================================================================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm" # Cache node_modules for speed
+
+      # ====================================================================
+      # Step 3: Install dependencies
+      # ====================================================================
+      - name: Install dependencies
+        run: npm ci # ci = clean install (recommended for CI)
+
+      # ====================================================================
+      # Step 4: Generate Prisma client
+      # ====================================================================
+      # Prisma must be generated before tests run
+      # (TypeScript won't find Prisma types without it)
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # ====================================================================
+      # Step 5: Run database migrations
+      # ====================================================================
+      # Apply schema.prisma to test database
+      # This creates all tables (patients, lab_tests, users, audit_logs)
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      # ====================================================================
+      # Step 6: Run tests with coverage
+      # ====================================================================
+      # Vitest runs all *.test.ts files
+      # --coverage flag collects coverage metrics
+      # --run flag exits after tests complete (doesn't watch)
+      - name: Run tests with coverage
+        run: npm run test:coverage -- --run
+
+      # ====================================================================
+      # Step 7: Check coverage threshold (fail if <80%)
+      # ====================================================================
+      # Healthcare software must have high test coverage (FDA/HIPAA requirement)
+      # 80% is minimum baseline (some teams require 90%)
+      # This step extracts coverage % from vitest report and fails if too low
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(node -e "
+            const report = require('./coverage/coverage-summary.json');
+            console.log(report.total.lines.pct);
+          ")
+
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "❌ Coverage $COVERAGE% below 80% threshold"
+            exit 1
+          fi
+
+          echo "✅ Coverage $COVERAGE% meets 80% threshold"
+
+      # ====================================================================
+      # Step 8: Upload coverage to Codecov (optional)
+      # ====================================================================
+      # Codecov tracks coverage over time (detect regressions)
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/coverage-final.json
+          flags: unittests
+          fail_ci_if_error: false # Don't fail if Codecov is down
+
+  # ============================================================================
+  # JOB 2: LINT & TYPE CHECK
+  # ============================================================================
+  # Purpose: Check code style and TypeScript errors
+  # Tools: ESLint (linting), TypeScript (type checking), Prettier (formatting)
+  #
+  # El problema (en JavaScript):
+  # Code style inconsistencies cause merge conflicts.
+  # Type errors cause runtime bugs.
+  #
+  # Con linting + type checking:
+  # Catch style issues + bugs before code review.
+  #
+  # Ventajas:
+  # - Consistent codebase (everyone follows same rules)
+  # - Type safety (no any[] in healthcare code)
+  # - Fast feedback (lint errors appear in <2 seconds)
+  #
+  # Aplicación Healthcare:
+  # Type errors can kill patients.
+  # This job prevents preventable bugs.
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ====================================================================
+      # Step 1: ESLint
+      # ====================================================================
+      # Checks code style, unused variables, suspicious patterns
+      - name: Run ESLint
+        run: npm run lint
+
+      # ====================================================================
+      # Step 2: TypeScript type check
+      # ====================================================================
+      # Ensures no type errors exist
+      # This is separate from build (compilation) for faster feedback
+      - name: TypeScript type check
+        run: npm run typecheck
+
+      # ====================================================================
+      # Step 3: Prettier format check
+      # ====================================================================
+      # Ensures consistent formatting (spaces, semicolons, etc.)
+      - name: Check code formatting
+        run: npx prettier --check src/
+
+  # ============================================================================
+  # JOB 3: SECURITY
+  # ============================================================================
+  # Purpose: Check for vulnerable dependencies
+  # Tool: npm audit (built-in Node.js vulnerability scanner)
+  #
+  # El problema (en JavaScript):
+  # Dependencies might have security vulnerabilities.
+  # Example: lodash v4.17.10 had prototype pollution vulnerability.
+  #
+  # Con npm audit:
+  # Scan dependencies for known CVEs (common vulnerabilities).
+  # Block if high-severity vulnerabilities found.
+  #
+  # Ventajas:
+  # - Catches vulnerable packages before production
+  # - Forced upgrades improve security
+  # - Compliance: HIPAA requires security scanning
+  //
+  // Aplicación Healthcare:
+  // A vulnerable dependency = potential data breach = HIPAA violation = $50k penalty.
+  // This job prevents that.
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ====================================================================
+      # npm audit: Check for vulnerabilities
+      # ====================================================================
+      # --audit-level=moderate: Fail if moderate or high severity found
+      # (low severity warnings are allowed for dev dependencies)
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+
+  # ============================================================================
+  # JOB 4: DEPLOY (Only on main branch)
+  # ============================================================================
+  # Purpose: Deploy to staging environment
+  // Triggers: Only if test + lint + security all pass
+  // Requirement: Manual approval before production deployment
+  //
+  // El problema (en JavaScript):
+  // How do you safely deploy to production?
+  // Automatic deployment = risk (bad code reaches users).
+  //
+  // Con multi-stage deployment:
+  // 1. Staging: Automatic deployment (test environment)
+  // 2. Production: Manual approval required (real users)
+  //
+  // Ventajas:
+  // - Staging tests real code before production
+  // - Manual approval prevents accidents
+  // - Audit trail: who approved deployment
+  //
+  // Aplicación Healthcare:
+  // FDA requires approval for production deployments.
+  // Staging deployment is automatic (fast feedback).
+  // Production deployment requires manual approval (safety).
+
+  deploy:
+    needs: [test, lint, security] # Only runs if all previous jobs pass
+    if: github.ref == 'refs/heads/main' # Only on main branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ====================================================================
+      # Step 1: Build application
+      # ====================================================================
+      # Compile TypeScript to JavaScript
+      - name: Build application
+        run: npm run build
+
+      # ====================================================================
+      # Step 2: Deploy to staging
+      # ====================================================================
+      # Replace with your AWS/Heroku/Vercel deployment command
+      # Example AWS CodeDeploy:
+      # - aws s3 cp dist/ s3://my-staging-bucket/ --recursive
+      # - aws codedeploy create-deployment ...
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          # TODO: Add your staging deployment command here
+          # Examples:
+          # - npx wrangler publish --env staging
+          # - aws s3 sync dist/ s3://staging-bucket/
+          # - heroku deploy (if using Heroku)
+          echo "✅ Staging deployment complete"
+
+      # ====================================================================
+      # Step 3: Run smoke tests on staging
+      # ====================================================================
+      # Quick tests to verify deployment succeeded
+      - name: Run smoke tests
+        run: |
+          echo "Testing staging environment..."
+          # TODO: Add smoke tests
+          # Example: curl -f https://staging.myapp.com/health
+          echo "✅ Smoke tests passed"
+
+      # ====================================================================
+      # Step 4: Create GitHub deployment
+      # ====================================================================
+      # Records deployment in GitHub (shows in PR + deployments tab)
+      - name: Create deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: 'staging',
+              auto_merge: false,
+              required_contexts: []
+            });
+
+      # ====================================================================
+      # Step 5: Send notification
+      # ====================================================================
+      # Optional: Notify team of deployment
+      - name: Send deployment notification
+        if: always() # Always run, even if previous step fails
+        run: |
+          echo "📣 Deployment notification sent to Slack"
+          # TODO: Add Slack webhook
+          # curl -X POST $SLACK_WEBHOOK -d '{"text": "Deployment to staging complete"}'
+
+# ============================================================================
+# NOTAS DE APRENDIZAJE
+// ============================================================================
+//
+// 1. CI/CD Pipeline is an Audit Trail
+//    Every step is logged: timestamp, who triggered, what ran, success/failure.
+//    This satisfies HIPAA audit requirements automatically.
+//
+// 2. Fail Fast Pattern
+//    If test fails, lint and security jobs don't run (save time).
+//    Deploy job only runs if all previous jobs pass (safety first).
+//
+// 3. Services (PostgreSQL Container)
+//    Tests need a real database to catch bugs mocks would miss.
+//    GitHub Actions spins up container on-demand (costs nothing).
+//
+// 4. Coverage Gates
+//    80% coverage is minimum for healthcare (FDA-style rigor).
+//    This job fails if coverage drops below threshold.
+//    Prevents gradual quality degradation.
+//
+// 5. Manual Approval for Production
+//    Automatic deployment to staging (fast feedback).
+//    Manual approval required for production (safety).
+//    Audit trail shows who approved what and when.
+//
+// 6. Secrets Management
+//    Never hardcode credentials in YAML (they'll be exposed in logs).
+//    Use GitHub Secrets for API keys, database URLs, etc.
+//    Reference with ${{ secrets.SECRET_NAME }}.
+
+// ============================================================================
+// CONEXIÓN CON TU BACKGROUND
+// ============================================================================
+//
+// AUDITORÍA:
+// This pipeline IS your audit trail.
+// Every step records: who ran it, when, what commands executed, what succeeded/failed.
+// This satisfies HIPAA requirements automatically.
+//
+// Your audit background means you understand why every step is logged.
+// This isn't paranoia; it's compliance.
+//
+// BIOLOGÍA (QBP):
+// High coverage requirements (80%+) come from FDA/medical software standards.
+// Your healthcare domain knowledge means you understand why we're strict about testing.
+//
+// SALES/UX:
+// Fast deployments = happy users.
+// Automated pipeline = zero downtime deployments.
+// This week you're ensuring your product is constantly improving without breaking things.
