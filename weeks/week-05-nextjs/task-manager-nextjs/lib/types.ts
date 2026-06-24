@@ -95,3 +95,18 @@ export type UpdateTaskInput = Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt
 // EJERCICIO 1: Define un tipo `TaskSummary` con solo id, title, status y priority.
 // Pista: usa Pick<Task, ...>
 // type TaskSummary = ...
+export type TaskSummary = Pick<Task, 'id' | 'title'| 'status'| 'priority'>;
+
+/**
+ * // Pick: quédate con solo estos campos
+type TaskSummary = Pick<Task, 'id' | 'title' | 'status' | 'priority'>
+
+// Omit: quédate con todo EXCEPTO estos campos
+type UpdateTaskInput = Partial<Omit<Task, 'id' | 'createdAt' | 'updatedAt'>>
+
+// Pick + intersection: toma algunos campos y agrega otros opcionales
+type CreateTaskInput = Pick<Task, 'title' | 'description' | 'priority'> & {
+  assignee?: string
+  dueDate?: string
+}
+ */

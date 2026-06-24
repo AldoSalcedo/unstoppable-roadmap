@@ -15,6 +15,8 @@
  */
 
 import Link from 'next/link';
+import TaskNav from '../components/TaskNav';
+import { Suspense } from 'react';
 
 // ============================================================================
 // TAREA 1.12: LAYOUT ANIDADO CON SIDEBAR
@@ -68,21 +70,9 @@ export default function TasksLayout({
       <div className="flex-1 max-w-6xl mx-auto w-full flex gap-6 px-6 py-6">
         {/* Sidebar de navegación — persiste entre navegaciones */}
         <aside className="w-48 flex-shrink-0">
-          <nav className="space-y-1">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              Filtrar por estado
-            </p>
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-              >
-                <span>{link.icon}</span>
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          <Suspense>
+            <TaskNav />
+          </Suspense>
         </aside>
 
         {/* Área de contenido — aquí se inyecta el page activo */}
@@ -93,15 +83,6 @@ export default function TasksLayout({
     </div>
   );
 }
-
-// Links del sidebar con íconos de estado
-const NAV_LINKS = [
-  { href: '/tasks', label: 'Todas', icon: '📋' },
-  { href: '/tasks?status=TODO', label: 'Pendientes', icon: '⏳' },
-  { href: '/tasks?status=IN_PROGRESS', label: 'En progreso', icon: '🔄' },
-  { href: '/tasks?status=DONE', label: 'Completadas', icon: '✅' },
-  { href: '/tasks?status=BLOCKED', label: 'Bloqueadas', icon: '🚫' },
-] as const;
 
 // NOTAS DE APRENDIZAJE — Día 1 (Layouts)
 // - El layout anidado se combina con el root layout automáticamente

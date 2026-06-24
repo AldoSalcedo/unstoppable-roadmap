@@ -106,7 +106,7 @@ export default async function HomePage() {
           />
         </div>
 
-        {/* CTA principal */}
+        {/* CTA(Call To Action) principal */}
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-8 text-center">
           <h3 className="text-xl font-semibold text-blue-900 mb-2">
             Gestiona las tareas de tu equipo
@@ -164,10 +164,33 @@ function StatCard({
   );
 }
 
-// NOTAS DE APRENDIZAJE — Día 1
-// - `page.tsx` y `layout.tsx` son Server Components por defecto
-// - `export const metadata` funciona solo en Server Components
-// - `async` en un Server Component es normal y poderoso
-// - `<Link>` prefetchea la ruta al hacer hover, sin recargar la página
-// - Los componentes auxiliares dentro de un Server Component
-//   también son Server Components — no se mandan al cliente
+/**
+ * NOTAS PERSONALES — Día 1
+ * - `page.tsx` y `layout.tsx` son Server Components por defecto
+ * - `export const metadata` funciona solo en Server Components
+ * - `async` en un Server Component es normal y poderoso
+ * - `<Link>` prefetchea la ruta al hacer hover, sin recargar la página
+ * - Los componentes auxiliares dentro de un Server Component
+ * también son Server Components — no se mandan al cliente
+ * Server Components: estos componentes se ejecutan e integran exclusivamente en el servidor, y al navegador solo le llega el resultado final listo para empaquetarse en la pantalla.
+ * Server vs. Client Components:
+ * Se ejecutan únicamente en el servidor. Pueden conectarse directamente a tu base de datos, leer archivos del sistema y realizar peticiones HTTP pesadas de forma segura y ultra rápida porque están en el mismo centro de datos.
+ * No tienen acceso al navegador. No puedes usar eventos como onClick, ni hooks de estado o efectos como useState o useEffect.
+ * 
+ * Client Components (Los tradicionales): Se envían y ejecutan en el navegador (se activan escribiendo "use client" al inicio del archivo).
+ * Tienen interactividad total. Manejan el estado, formularios, animaciones, clics, y hooks de React.
+ * 
+ * URL (Uniform Resource Locator): dirección única para localiår y acceder a recursos específicos como sitios web, imágenes o documentos en internet.
+ * 
+ * Prefetching (en español, Pre-recuperación o Pre-carga) es una técnica de optimización de rendimiento que consiste en descargar recursos (como páginas, código, imágenes o datos) antes de que el usuario los solicite explícitamente.
+ * 
+ * Metadata (datos sobre otros datos): no es el contenido principal en sí, sino toda la información oculta, descriptiva y estructural que sirve para identificar, clasificar, organizar y entender ese contenido principal.
+ * Ejemplo analógico: Un Libro > El dato principal: Es la historia, el texto completo de los capítulos que vas a leer.
+ * La metadata: Es la información que viene en la portada y en la ficha bibliográfica: el nombre del autor, el título, el año de publicación, la editorial, el número de páginas y el código de barras (ISBN).
+ * Tú no lees el libro por el código de barras, pero las librerías y las computadoras necesitan ese código (esa metadata) para poder encontrar el libro en una base de datos en un segundo.
+ * Metadata en la Web (SEO y Navegadores): es toda la información que pones dentro de la etiqueta <head> de tu HTML. Los usuarios no la ven directamente en la página, pero es vital para los buscadores (como Google) y los navegadores.
+ * Metadata en Archivos (Fotos, Videos, PDFs): La metadata (datos EXIF): El archivo guarda oculto el modelo de tu teléfono, la hora exacta en la que tomaste la foto, la apertura del lente y, si tienes el GPS encendido, las coordenadas geográficas exactas de dónde estabas parado.
+ * Metadata en Bases de Datos: es el Esquema de la base de datos. Te dice cómo se llaman las columnas, si el dato debe ser un número o un texto, cuál es la clave primaria y cómo se relacionan las tablas entre sí, pero no contiene los registros de los pacientes reales.
+ * 
+ * 
+*/

@@ -18,8 +18,9 @@ import type { Task, CreateTaskInput, UpdateTaskInput } from './types';
 // TAREA 1.4: DATOS MOCK
 // ============================================================================
 
-// Tareas de ejemplo con contexto clínico real
-const MOCK_TASKS: Task[] = [
+// Exportado para que los Server Actions de Day 3 puedan mutarlo directamente.
+// En Week 6 esto se reemplaza con Prisma — las Server Actions no tocarán este array.
+export const MOCK_TASKS: Task[] = [
   {
     id: '1',
     title: 'Revisar resultados de laboratorio — Paciente #4521',
@@ -167,6 +168,8 @@ export async function getTaskStats(): Promise<{
 
 // EJERCICIO 2: Implementa `getTasksByAssignee(assignee: string)` que filtre
 // las tareas por el campo `assignee`. Simula 250ms de latencia.
-// export async function getTasksByAssignee(assignee: string): Promise<Task[]> {
-//   // Tu implementación aquí
-// }
+export async function getTasksByAssignee(assignee: string): Promise<Task[]> {
+  // Tu implementación aquí
+  await simulateDbLatency(250);
+  return MOCK_TASKS.filter((t) => t.assignee === assignee);
+}

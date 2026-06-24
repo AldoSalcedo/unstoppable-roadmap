@@ -53,6 +53,15 @@ export async function generateMetadata({
   return {
     title: task.title,
     description: task.description,
+    // EJERCICIO 5.3: Agrega Open Graph metadata para compartir en redes (Día 5)
+    // Pista: añade una propiedad `openGraph` con:
+    //   openGraph: {
+    //     title: task.title,
+    //     description: task.description,
+    //     type: 'article',
+    //     // url: `https://task-manager.health/tasks/${task.id}`,
+    //   }
+    // Bonus: agrega `twitter: { card: 'summary', title: task.title }` también
   };
 }
 
@@ -174,6 +183,12 @@ export default async function TaskDetailPage({
         <div className="flex gap-3 mt-6 pt-6 border-t border-slate-100">
           {/* EJERCICIO 3: Agrega un botón "Editar" que navegue a /tasks/[id]/edit */}
           {/* Pista: usa <Link href={`/tasks/${task.id}/edit`}> */}
+          <Link 
+            href={`/tasks/${task.id}/edit`} 
+            className='px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors'
+          >
+            Editar
+          </Link>
           <Link
             href="/tasks"
             className="px-4 py-2 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
@@ -207,3 +222,10 @@ function MetaField({ label, value, icon }: { label: string; value: string; icon:
 // - `notFound()` es una función especial que activa el error boundary de 404
 // - `generateMetadata` puede hacer sus propias queries — Next.js las deduplica automáticamente
 // - Si llamas `getTaskById(id)` en generateMetadata Y en el page, Next.js hace solo UNA llamada
+
+/**
+ * NOTAS PERSONALES:
+ * un archivo o carpeta cuyo nombre está entre corchetes —por ejemplo, [id].jsx, [id].tsx o una carpeta llamada [id]— representa un parámetro dinámico o ruta dinámica (Dynamic Route).
+ * es una convención de nomenclatura que utilizan los frameworks modernos (como Next.js, Remix, Nuxt o SvelteKit) para indicarle al enrutador de la aplicación que esa parte de la URL va a cambiar dependiendo del usuario, paciente o producto que se esté consultando.
+ * 
+ */

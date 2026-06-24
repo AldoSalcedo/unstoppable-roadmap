@@ -14,6 +14,8 @@ import Link from 'next/link';
 import { getTasks, getTasksByStatus } from '@/lib/data';
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/lib/types';
 import type { Task, TaskStatus } from '@/lib/types';
+import { Suspense } from 'react';
+import SearchBar from '../components/SearchBar';
 
 export const metadata: Metadata = {
   title: 'Tareas',
@@ -38,15 +40,22 @@ export const metadata: Metadata = {
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string, q?: string }>;
 }) {
   // ⚠️ Next.js 16: searchParams ES un Promise — await obligatorio
-  const { status } = await searchParams;
+  const { status, q } = await searchParams;
 
   // Fetch condicional: con filtro o sin filtro
   const tasks = isValidStatus(status)
     ? await getTasksByStatus(status)
     : await getTasks();
+
+  const filteredTasks = q
+    ? tasks.filter((tasks) => 
+        tasks.title.toLowerCase().includes(q.toLowerCase()) ||
+        tasks.description.toLowerCase().includes(q.toLowerCase())
+      )
+    : tasks;
 
   const title = status && isValidStatus(status)
     ? `Tareas — ${STATUS_LABELS[status]}`
@@ -56,20 +65,23 @@ export default async function TasksPage({
     <div>
       {/* Header de la lista */}
       <div className="flex items-center justify-between mb-6">
+        <Suspense fallback={null}>
+          <SearchBar />
+        </Suspense>
         <div>
           <h2 className="text-2xl font-bold text-slate-900">{title}</h2>
           <p className="text-slate-500 text-sm mt-1">
-            {tasks.length} {tasks.length === 1 ? 'tarea' : 'tareas'} encontradas
+            {filteredTasks.length} {filteredTasks.length === 1 ? 'tarea' : 'tareas'} encontradas
           </p>
         </div>
       </div>
 
       {/* Lista de tareas */}
-      {tasks.length === 0 ? (
+      {filteredTasks.length === 0 ? (
         <EmptyState status={status} />
       ) : (
         <div className="space-y-3">
-          {tasks.map((task) => (
+          {filteredTasks.map((task) => (
             <TaskCard key={task.id} task={task} />
           ))}
         </div>

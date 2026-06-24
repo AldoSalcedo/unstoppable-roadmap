@@ -1,38 +1,44 @@
 /**
  * page.tsx — Formulario de Nueva Tarea (Ruta: /tasks/new)
- * DÍA 1: App Router Fundamentals
+ * DÍA 3: Server Actions & Forms
  *
  * CONCEPTOS CLAVE:
- * - Ruta estática dentro de una sección dinámica: /tasks/new siempre va antes que /tasks/[id]
- *   Next.js da precedencia a las rutas estáticas sobre las dinámicas automáticamente.
- * - El formulario es un stub — en Day 3 se conectará con un Server Action real
- * - El botón de submit no tiene `onClick` aún — se implementa con 'use client' en Day 3
+ * - `action={createTask}` conecta el <form> directamente al Server Action
+ * - No necesitas un API route, no necesitas fetch(), no necesitas useState para loading
+ * - El <form> envía un POST nativo al servidor — funciona SIN JavaScript
+ * - SubmitButton usa useFormStatus para mostrar "Creando..." mientras procesa
  *
- * ORDEN DE RESOLUCIÓN DE RUTAS:
+ * CÓMO FUNCIONA:
+ * 1. Usuario llena el form y hace click en "Crear Tarea"
+ * 2. HTML envía un POST con FormData al servidor
+ * 3. Next.js ejecuta createTask(formData) en el servidor
+ * 4. createTask valida, agrega a MOCK_TASKS, llama revalidatePath + redirect
+ * 5. Usuario es redirigido a /tasks con la nueva tarea visible
+ *
+ * ORDEN DE RESOLUCIÓN DE RUTAS (recordatorio):
  * /tasks/new → app/tasks/new/page.tsx  (estático, gana)
  * /tasks/1   → app/tasks/[id]/page.tsx (dinámico, [id] = "1")
- * /tasks/new nunca se confunde con [id] = "new"
  */
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { createTask } from '@/app/tasks/actions';
+import SubmitButton from '@/app/components/SubmitButton';
 
 export const metadata: Metadata = {
   title: 'Nueva Tarea',
 };
 
 // ============================================================================
-// TAREA 1.20: FORMULARIO STUB (SE COMPLETA EN DÍA 3)
+// TAREA 3.6: CONECTAR EL FORMULARIO AL SERVER ACTION
 // ============================================================================
 
 /**
- * NewTaskPage — formulario para crear una tarea clínica
+ * NewTaskPage — formulario conectado al Server Action createTask
  *
- * Por ahora es un Server Component sin interactividad.
- * En Day 3 agregaremos:
- * - `action={createTask}` conectado al Server Action
- * - `SubmitButton` con 'use client' y useFormStatus para el estado pending
- * - Validación con Zod en el Server Action
+ * Ya tienes los imports listos arriba (createTask y SubmitButton).
+ * Tu tarea: completar el EJERCICIO 3.1 en actions.ts para que
+ * al hacer submit la tarea se cree y te redirija a /tasks.
  */
 export default function NewTaskPage() {
   return (
@@ -53,13 +59,11 @@ export default function NewTaskPage() {
         </h2>
 
         {/*
-         * `action` estará conectado a un Server Action en Day 3.
-         * Por ahora el formulario no hace nada al submitear.
-         *
-         * El atributo `action` en un <form> con un Server Action
-         * es progressive enhancement: funciona SIN JavaScript si es necesario.
+         * `action={createTask}` pasa la función del Server Action directamente.
+         * Next.js la convierte en un endpoint POST automáticamente.
+         * Funciona sin JavaScript — progressive enhancement real.
          */}
-        <form className="space-y-5">
+        <form action={createTask} className="space-y-5">
           {/* Título */}
           <div>
             <label
@@ -173,17 +177,14 @@ export default function NewTaskPage() {
           {/* Botones */}
           <div className="flex gap-3 pt-2">
             {/*
-             * TODO Day 3: Reemplazar este <button> con <SubmitButton />
-             * que use 'use client' + useFormStatus para mostrar estado pending
+             * SubmitButton usa useFormStatus para detectar cuando createTask está corriendo.
+             * Muestra "Creando..." y deshabilita el botón automáticamente.
+             * Esto funciona porque SubmitButton es un hijo del <form>.
+             *
+             * IMPORTANTE: primero debes implementar EJERCICIO 3.4 en SubmitButton.tsx
+             * y EJERCICIO 3.1 en actions.ts para que todo el flujo funcione.
              */}
-            <button
-              type="submit"
-              disabled
-              className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium opacity-50 cursor-not-allowed"
-              title="Se activa en el Día 3 con Server Actions"
-            >
-              Crear Tarea (Día 3)
-            </button>
+            <SubmitButton label="Crear Tarea" pendingLabel="Creando..." />
             <Link
               href="/tasks"
               className="px-4 py-2.5 text-sm border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
@@ -197,8 +198,8 @@ export default function NewTaskPage() {
   );
 }
 
-// NOTAS DE APRENDIZAJE — Día 1 (Rutas Estáticas vs Dinámicas)
-// - /tasks/new y /tasks/[id] coexisten sin conflicto
-// - Next.js siempre prefiere la ruta más específica (estática > dinámica)
-// - El <form> sin action es válido en HTML — en Day 3 conectaremos el Server Action
-// - `disabled` en el botón es un recordatorio visual de que falta implementar
+// NOTAS DE APRENDIZAJE — Día 3 (Forms + Server Actions)
+// - `action={createTask}` en un <form> es suficiente — no necesitas onSubmit ni fetch
+// - SubmitButton DEBE ser hijo del <form> para que useFormStatus lo detecte
+// - El flujo: submit → createTask(formData) → revalidatePath → redirect
+// - Sin JS: el browser hace el POST nativo directamente — progressive enhancement real
